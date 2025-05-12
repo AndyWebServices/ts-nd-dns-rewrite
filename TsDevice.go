@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"regexp"
 	"slices"
+	"sync"
 )
 
 const devicePath = "device"
@@ -99,17 +100,19 @@ func (d TsDevice) setCustomUrls(config Config) {
 	fmt.Printf("Device %s has extraHostnames -> %s\n", d.Hostname, d.ExtraHostnames)
 }
 
-func (d TsDevice) getRewrites() []NextdnsRewrite {
-	rewrites := make([]NextdnsRewrite, 0, 1+len(d.ExtraHostnames))
+func (d TsDevice) getRewriteByName() map[string]NextdnsRewrite {
+	rewrites := make(map[string]NextdnsRewrite, 1+len(d.ExtraHostnames))
+
 	nextdnsRewrite := NextdnsRewrite{Name: d.getAWSHostname(), Content: d.Name}
-	rewrites = append(rewrites, nextdnsRewrite)
+	rewrites[nextdnsRewrite.Name] = nextdnsRewrite
 	for _, extraHostname := range d.ExtraHostnames {
-		rewrites = append(rewrites, NextdnsRewrite{Name: extraHostname, Content: d.Name})
+		rewrites[extraHostname] = NextdnsRewrite{Name: extraHostname, Content: d.Name}
 	}
+
 	return rewrites
 }
 
-func GetTsDevices(config Config, tagName string) []TsDevice {
+func GetTsDevices(config Config, tagName string, workerCount int) []TsDevice {
 	path, err := url.JoinPath(tsApiV2Path, tailnetPath, tsOrgName, devicesPath)
 	if err != nil {
 		log.Fatal("Error joining path:", err)
@@ -124,18 +127,40 @@ func GetTsDevices(config Config, tagName string) []TsDevice {
 	}
 	data := tsGetRequest[DevicesStruct](config, u.String())
 
-	// Process list of devices
-	if len(data.Devices) == 0 {
-		log.Fatal("No tailscale devices found")
+	// Init sync primitives
+	var wg sync.WaitGroup
+	resultChan := make(chan TsDevice, len(data.Devices))
+	jobChan := make(chan TsDevice, len(data.Devices))
+	// Start worker goroutines
+	for i := 0; i < workerCount; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for tsDevice := range jobChan {
+				if slices.Contains(tsDevice.Tags, tagName) {
+					tsDevice.setCustomUrls(config)
+					resultChan <- tsDevice
+				}
+			}
+		}()
 	}
 
-	// Filter for devices that contain at least 1 tag
-	tsDevices := data.Devices[:0]
+	// Send jobs
 	for _, tsDevice := range data.Devices {
-		if slices.Contains(tsDevice.Tags, tagName) {
-			tsDevice.setCustomUrls(config)
-			tsDevices = append(tsDevices, tsDevice)
-		}
+		jobChan <- tsDevice
+	}
+	close(jobChan)
+
+	// Go routine to close resultChan
+	go func() {
+		wg.Wait()
+		close(resultChan)
+	}()
+
+	// Collect results
+	var tsDevices []TsDevice
+	for tsDevice := range resultChan {
+		tsDevices = append(tsDevices, tsDevice)
 	}
 	return tsDevices
 }
