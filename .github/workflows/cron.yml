@@ -1,0 +1,26 @@
+name: Run Ansible Playbook on Cron
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'  # Runs every 15 minutes
+  workflow_dispatch:       # Allows manual triggering too
+
+jobs:
+  run-ansible:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Test
+        run: echo 'abdefgh'
+
+      - name: Print hello world
+        run: >
+          MACHINES=$(
+            curl -X GET 'https://api.tailscale.com/api/v2/tailnet/andywebservices.org.github/devices' --header 'Authorization: Bearer ${{ secrets.TS_API_TOKEN }}' \
+            | jq '.. | objects | select(.tags and (.tags | index("tag:nextdns"))) | .name'
+          ) && for MACHINE in "${MACHINES[@]}"; do
+                   echo "$MACHINE"
+               done
