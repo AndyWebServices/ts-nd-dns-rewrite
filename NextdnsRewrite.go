@@ -141,6 +141,7 @@ func getNextdnsRewrites(config Config) []NextdnsRewrite {
 	if err := json.Unmarshal(body, &data); err != nil {
 		log.Fatal("Error parsing HTTP response:", err)
 	}
-
+	fmt.Printf("getNextdnsRewrites: %s\n", req)
+	fmt.Printf("getNextdnsRewrites: %s\n", body)
 	return data.NextdnsRewrites
 }

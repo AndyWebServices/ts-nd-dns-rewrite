@@ -1,4 +1,4 @@
-name: Run Ansible Playbook on Cron
+name: Run `go run app reload`
 
 on:
   push:
