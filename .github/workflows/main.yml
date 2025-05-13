@@ -24,6 +24,6 @@ jobs:
       - name: Run reload
         env:
           TS_API_TOKEN: ${{ secrets.TS_API_TOKEN }}
-          NEXTDNS_API_TOKEN: $${{ secrets.NEXTDNS_API_TOKEN }}
+          NEXTDNS_API_TOKEN: ${{ secrets.NEXTDNS_API_TOKEN }}
         run: |
           go run app reload
