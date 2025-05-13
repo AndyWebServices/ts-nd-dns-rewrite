@@ -42,6 +42,10 @@ func tsGetRequest[T any](config Config, urlEndpoint string) T {
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		log.Fatal("Error sending HTTP request. Status code:", resp.StatusCode, "Status:", resp.Status)
+	}
+
 	// Read body into
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
